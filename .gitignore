@@ -1,0 +1,24 @@
+# Секреты — НИКОГДА не коммитить
+.env
+*.key
+
+# Виртуальное окружение
+venv/
+.venv/
+
+# Векторная БД и загруженные документы (данные, не код)
+chroma_db/
+uploads/
+
+# Python-кэши
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+
+# ОС
+.DS_Store
+Thumbs.db
