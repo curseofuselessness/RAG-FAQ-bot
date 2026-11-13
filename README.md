@@ -50,7 +50,6 @@ uvicorn api:app --reload
 | POST   | `/upload`          | загрузить PDF/TXT и залить в БД             |
 | POST   | `/ask`             | ответить на вопрос по документам            |
 | GET    | `/chunks/{index}`  | посмотреть чанк по индексу (для отладки)    |
-| POST   | `/reset`           | очистить векторную БД                       |
 | GET    | `/health`          | проверка живости                            |
 | GET    | `/v1/models`       | список моделей (OpenAI-совместимо)          |
 

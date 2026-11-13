@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from rag.ingest import ingest_file
 from rag import config
-from rag.config import CHAT_MODEL, EMBED_MODEL, reset_db
+from rag.config import CHAT_MODEL, EMBED_MODEL
 from rag.query import answer
 
 app = FastAPI(title="RAG Assistant")
@@ -65,17 +65,6 @@ async def get_chunk(index: int):
         "metadata": res["metadatas"][0],
         "text": res["documents"][0],
     }
-
-
-@app.post("/reset")
-async def reset():
-    """Полностью очищает векторную БД (все документы и векторы).
-
-    После сброса нужно заново залить документы через /upload или `main.py ingest`.
-    """
-    before = config.collection.count()
-    reset_db()
-    return {"status": "ok", "deleted_chunks": before}
 
 
 @app.post("/ask", response_model=AskResponse)
