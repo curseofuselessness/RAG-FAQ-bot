@@ -28,14 +28,22 @@ def embed(texts: list[str]) -> list[list[float]]:
 
 
 def ingest(chunks: list[str], source_name: str) -> int:
-    """Кладёт чанки в Chroma: вектор + сам текст + метаданные (источник, номер).
+    """Кладёт чанки в Chroma, заменяя предыдущую версию этого источника.
 
-    documents храним вместе с вектором — при retrieval Chroma вернёт и соседей,
-    и их текст, который потом вставляется в промпт.
+    Идемпотентность: повторная загрузка файла с тем же именем не плодит дубли
+    и не падает на Duplicate ID — старые чанки удаляются, новые добавляются.
+
+    Порядок операций важен: эмбеддинги (сеть, самое ненадёжное) считаем ДО
+    удаления, чтобы при сбое OpenRouter старые данные остались на месте.
+
     Возвращает число добавленных чанков.
     """
-    embeddings = embed(chunks)
-    config.collection.add(
+    if not chunks:
+        raise ValueError("В файле не найден текст (возможно, это скан без текстового слоя)")
+
+    embeddings = embed(chunks)                              # 1. сеть: может упасть — база цела
+    config.collection.delete(where={"source": source_name})  # 2. убрать старую версию файла
+    config.collection.add(                                  # 3. записать новую
         ids=[f"{source_name}_{i}" for i in range(len(chunks))],
         embeddings=embeddings,
         documents=chunks,  # сам текст — нужен для промпта при retrieval

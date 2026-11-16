@@ -10,8 +10,12 @@ if __name__ == "__main__":
     #   ingest — одноразовый: документ → чанки → векторы → Chroma
     #   без аргументов — на каждый вопрос: retrieve top-k → промпт → LLM
     if len(sys.argv) > 2 and sys.argv[1] == "ingest":
-        n = ingest_file(sys.argv[2])
-        print(f"Ingested {n} chunks from {sys.argv[2]}")
+        try:
+            n = ingest_file(sys.argv[2])
+            print(f"Ingested {n} chunks from {sys.argv[2]}")
+        except ValueError as exc:
+            print(f"Ошибка: {exc}")
+            sys.exit(1)
     elif len(sys.argv) > 1 and sys.argv[1] == "reset":
         from rag import config as cfg
 

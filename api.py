@@ -56,7 +56,11 @@ async def upload(file: UploadFile):
     path = os.path.join("uploads", safe_name)
     with open(path, "wb") as f:
         shutil.copyfileobj(file.file, f)
-    chunks = ingest_file(path)
+    try:
+        chunks = ingest_file(path)
+    except ValueError as exc:
+        # 400, а не 500: проблема в присланном файле, а не в сервере
+        raise HTTPException(400, str(exc))
     return {"filename": safe_name, "chunks": chunks}
 
 
