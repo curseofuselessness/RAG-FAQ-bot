@@ -142,4 +142,7 @@ async def health():
 @app.get("/v1/models")
 async def list_models():
     """OpenAI-совместимый список моделей"""
-    return {"object": "list", "data": [{"id": m, "object": "model"} for m in (CHAT_MODEL, EMBED_MODEL)]}
+    return {
+        "object": "list",
+        "data": [{"id": m, "object": "model"} for m in (CHAT_MODEL, EMBED_MODEL)],
+    }

@@ -1,5 +1,7 @@
 # RAG FAQ bot
 
+[![CI](https://github.com/curseofuselessness/RAG-FAQ-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/curseofuselessness/RAG-FAQ-bot/actions/workflows/ci.yml)
+
 Ассистент по документам: загружаешь PDF/TXT — задаёшь вопросы, получаешь ответы
 со ссылками на источники. Классический RAG-пайплайн без тяжёлых фреймворков.
 
@@ -60,6 +62,18 @@ uvicorn api:app --reload
 Загрузка идемпотентна: файл с тем же именем заменяет предыдущую версию
 (старые чанки удаляются, а не дублируются). Если из файла не удалось
 извлечь текст (например, скан без текстового слоя), вернётся `400`.
+
+## Тесты
+
+```bash
+pip install -r requirements-dev.txt
+pytest          # 25 тестов, ~1 секунда
+ruff check .    # линтер
+```
+
+Тесты не ходят в сеть и не трогают `chroma_db`: Chroma подменяется на
+`EphemeralClient` (в памяти), а вызовы эмбеддингов — на заглушку через
+`monkeypatch`. GitHub Actions прогоняет линтер и тесты на каждый push и PR.
 
 ## Структура
 
