@@ -122,49 +122,72 @@ dropzone.addEventListener("drop", (e) => {
 // Читаем поток вручную через fetch + ReadableStream, без библиотек.
 // ─────────────────────────────────────────────────────────────
 
-// Добавить пузырь в чат и вернуть его тело (куда можно дописывать текст)
+// Добавить пузырь в чат. Возвращает объект:
+//   { bubble, text, sourcesBox } — text сюда дописывается стриминг,
+//   sourcesBox — контейнер чипов ВНУТРИ пузыря (после текста).
 function addBubble(role) {
   const isUser = role === "user";
+
+  // Строка чата: прижимаем пузырь вправо (пользователь) или влево (ассистент)
   const wrap = document.createElement("div");
   wrap.className = isUser ? "flex justify-end" : "flex justify-start";
 
+  // Сам пузырь. flex-col + gap: текст сверху, источники снизу — в одном блоке
   const bubble = document.createElement("div");
-  bubble.className = isUser
-    ? "max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-tr-sm bg-accent px-4 py-3 text-sm leading-relaxed text-white"
-    : "max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-tl-sm bg-slate-800/80 px-4 py-3 text-sm leading-relaxed";
+  bubble.className = (isUser
+    ? "max-w-[85%] rounded-2xl rounded-tr-sm bg-accent px-4 py-3 text-sm leading-relaxed text-white"
+    : "max-w-[85%] rounded-2xl rounded-tl-sm bg-slate-800/80 px-4 py-3 text-sm leading-relaxed")
+    + " flex flex-col gap-2";
   wrap.appendChild(bubble);
 
-  // Контейнер под будущие чипы источников
+  const text = document.createElement("span");
+  text.className = "whitespace-pre-wrap";
+  bubble.appendChild(text);
+
+  // Контейнер под чипы источников — только у ответа ассистента.
+  // По умолчанию скрыт: покажем, только если источники реально есть.
+  let sourcesBox = null;
   if (!isUser) {
-    const sources = document.createElement("div");
-    sources.className = "mt-2 flex flex-wrap gap-1.5";
-    wrap.appendChild(sources);
+    sourcesBox = document.createElement("div");
+    sourcesBox.className = "hidden flex-wrap items-center gap-1.5 border-t border-slate-700/60 pt-2";
+    bubble.appendChild(sourcesBox);
   }
 
   messages.appendChild(wrap);
   messages.scrollTop = messages.scrollHeight;
-  return bubble;
+  return { bubble, text, sourcesBox };
 }
 
-// Чипы «источник · chunk N» под ответом
-function renderSources(wrapSources, list) {
-  wrapSources.innerHTML = "";
+// Чипы «источник · chunk N» внутри пузыря под текстом ответа
+function renderSources(sourcesBox, list) {
+  if (!sourcesBox) return;
+  sourcesBox.innerHTML = "";
+
+  if (!list || list.length === 0) {
+    sourcesBox.classList.add("hidden");
+    sourcesBox.classList.remove("flex");
+    return;
+  }
+
   for (const s of list) {
     const chip = document.createElement("span");
     chip.className = "rounded-full border border-slate-700 bg-slate-900 px-2.5 py-1 text-[11px] text-slate-400";
     chip.textContent = `${s.source} · chunk ${s.chunk}`;
-    wrapSources.appendChild(chip);
+    sourcesBox.appendChild(chip);
   }
+  sourcesBox.classList.remove("hidden");
+  sourcesBox.classList.add("flex");
 }
 
 async function askQuestion(question) {
-  addBubble("user").textContent = question;
+  addBubble("user").text.textContent = question;
 
-  const answerBubble = addBubble("assistant");
-  answerBubble.classList.add("typing-cursor");
-  answerBubble.textContent = "";
+  const reply = addBubble("assistant");
+  reply.bubble.classList.add("typing-cursor");
 
-  const sourcesBox = answerBubble.parentElement.querySelector("div.mt-2");
+  // Источники держим в переменной: решение показать/скрыть принимаем в конце,
+  // когда знаем, ответила модель «Источники: —» или дала ссылки.
+  let lastSources = [];
 
   sendBtn.disabled = true;
 
@@ -195,20 +218,26 @@ async function askQuestion(question) {
         const payload = JSON.parse(raw.slice(6));   // убираем префикс "data: "
 
         if (payload.type === "sources") {
-          renderSources(sourcesBox, payload.sources);
+          lastSources = payload.sources;
         } else if (payload.type === "token") {
-          answerBubble.textContent += payload.text;
+          reply.text.textContent += payload.text;
           messages.scrollTop = messages.scrollHeight;
         } else if (payload.type === "error") {
-          answerBubble.textContent = `Ошибка: ${payload.message}`;
+          reply.text.textContent = `Ошибка: ${payload.message}`;
+          lastSources = [];
         }
       }
     }
+
+    // Модель сама пишет «Источники: —», если ответа в документах нет —
+    // тогда чипы не показываем, чтобы не противоречить ответу.
+    const noAnswer = /Источники:\s*—/.test(reply.text.textContent);
+    renderSources(reply.sourcesBox, noAnswer ? [] : lastSources);
   } catch (err) {
-    answerBubble.textContent = "Не удалось получить ответ. Проверьте соединение и ключ API.";
+    reply.text.textContent = "Не удалось получить ответ. Проверьте соединение и ключ API.";
     console.error(err);
   } finally {
-    answerBubble.classList.remove("typing-cursor");
+    reply.bubble.classList.remove("typing-cursor");
     sendBtn.disabled = false;
     messages.scrollTop = messages.scrollHeight;
   }
