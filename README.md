@@ -36,19 +36,23 @@ python main.py                        # задать вопрос интерак
 python main.py reset                  # очистить базу
 ```
 
-REST API:
+REST API и веб-интерфейс:
 
 ```bash
 uvicorn api:app --reload
-# Swagger: http://127.0.0.1:8000/docs
+# Веб-интерфейс: http://127.0.0.1:8000
+# Swagger:       http://127.0.0.1:8000/docs
 ```
 
 Эндпоинты:
 
 | Метод  | Путь               | Что делает                                  |
 |--------|--------------------|---------------------------------------------|
+| GET    | `/`                | веб-интерфейс (HTML + Tailwind CDN)         |
 | POST   | `/upload`          | загрузить PDF/TXT и залить в БД             |
 | POST   | `/ask`             | ответить на вопрос по документам            |
+| POST   | `/ask/stream`      | то же, но ответ потоком (SSE)               |
+| GET    | `/documents`       | список документов в базе                    |
 | GET    | `/chunks/{index}`  | посмотреть чанк по индексу (для отладки)    |
 | GET    | `/health`          | проверка живости                            |
 | GET    | `/v1/models`       | список моделей (OpenAI-совместимо)          |
@@ -62,4 +66,7 @@ rag/
 └── query.py    # retrieval → промпт → LLM → ответ с источниками
 main.py         # CLI
 api.py          # FastAPI
+static/
+├── index.html  # страница (Tailwind CDN, без сборки)
+└── app.js      # запросы к API, drag&drop, стриминг ответа
 ```

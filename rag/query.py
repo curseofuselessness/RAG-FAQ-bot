@@ -94,6 +94,34 @@ def build_context(chunks: list[dict]) -> str:
     )
 
 
+def stream_answer(question: str, top_k: int = 4):
+    """То же, что answer(), но отдаёт ответ по кусочкам (генератор строк).
+
+    Нужна для стриминга: API отдаёт текст клиенту по мере генерации,
+    а не ждёт полный ответ. Источники при этом доступны сразу —
+    retrieval выполняется до вызова LLM, поэтому их можно вернуть первыми.
+    """
+    chunks = retrieve(question, top_k=top_k)
+    context = build_context(chunks)
+
+    stream = client.chat.completions.create(
+        model=CHAT_MODEL,
+        temperature=0,
+        stream=True,
+        extra_body={"reasoning": {"enabled": False}},
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT.format(
+                retrieved_chunks=context, user_question=question
+            )},
+            {"role": "user", "content": question},
+        ],
+    )
+    for part in stream:
+        delta = part.choices[0].delta.content
+        if delta:
+            yield delta
+
+
 def answer(question: str, top_k: int = 4) -> dict:
     """Полный RAG-цикл: retrieve → промпт (контекст + вопрос) → LLM → ответ.
 

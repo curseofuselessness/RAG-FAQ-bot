@@ -49,3 +49,17 @@ def ingest_file(path: str) -> int:
     text = load_pdf(path) if path.endswith(".pdf") else load_text(path)
     chunks = splitter.split_text(text)
     return ingest(chunks, source_name=path.replace("\\", "/").split("/")[-1])
+
+
+def list_documents() -> list[dict]:
+    """Возвращает источники, лежащие в БД, и число чанков у каждого.
+
+    Chroma умеет отдать только метаданные (без текстов и векторов) —
+    этого достаточно, чтобы посчитать чанки по каждому файлу.
+    """
+    res = config.collection.get(include=["metadatas"])
+    counts: dict[str, int] = {}
+    for meta in res["metadatas"]:
+        source = meta.get("source", "unknown")
+        counts[source] = counts.get(source, 0) + 1
+    return [{"source": s, "chunks": n} for s, n in sorted(counts.items())]
