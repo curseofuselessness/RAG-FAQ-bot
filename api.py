@@ -42,6 +42,19 @@ async def index():
     return FileResponse(BASE_DIR / "static" / "index.html")
 
 
+def safe_filename(name: str) -> str:
+    """Оставляет от имени файла только последний сегмент.
+
+    Нельзя полагаться на os.path.basename: на Linux обратный слэш — обычный
+    символ, а не разделитель, поэтому "..\\..\\evil.txt" пройдёт насквозь.
+    Нормализуем оба вида разделителей и отбрасываем пустые/опасные имена.
+    """
+    name = name.replace("\\", "/").rsplit("/", 1)[-1]
+    if name in ("", ".", ".."):
+        raise HTTPException(400, "Invalid filename")
+    return name
+
+
 @app.post("/upload")
 async def upload(file: UploadFile):
     """Принимает файл (PDF/TXT), сохраняет в uploads/ и заливает в Chroma.
@@ -51,8 +64,7 @@ async def upload(file: UploadFile):
     if not file.filename.endswith((".pdf", ".txt")):
         raise HTTPException(400, "Only PDF/TXT")
     os.makedirs("uploads", exist_ok=True)
-    # basename защищает от имени вида "..\..\secret.txt" — запишем только имя
-    safe_name = os.path.basename(file.filename)
+    safe_name = safe_filename(file.filename)
     path = os.path.join("uploads", safe_name)
     with open(path, "wb") as f:
         shutil.copyfileobj(file.file, f)
