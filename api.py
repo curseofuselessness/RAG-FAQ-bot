@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from rag.ingest import ingest_file, list_documents
 from rag import config
 from rag.config import CHAT_MODEL, EMBED_MODEL
-from rag.query import answer, retrieve, stream_answer
+from rag.query import NO_ANSWER, answer, retrieve, stream_answer
 
 BASE_DIR = Path(__file__).parent
 
@@ -134,9 +134,17 @@ def ask_stream(req: AskRequest):
     def generate():
         try:
             # retrieval уже выполнен — источники можно отдать сразу
-            sources = [{"source": c["source"], "chunk": c["chunk"]} for c in retrieve(req.question)]
+            chunks = retrieve(req.question)
+            sources = [{"source": c["source"], "chunk": c["chunk"]} for c in chunks]
             yield event({"type": "sources", "sources": sources})
-            for token in stream_answer(req.question):
+
+            # ничего релевантного — не зовём LLM, отвечаем отказом сразу
+            if not chunks:
+                yield event({"type": "token", "text": NO_ANSWER})
+                yield event({"type": "done"})
+                return
+
+            for token in stream_answer(req.question, chunks):
                 yield event({"type": "token", "text": token})
             yield event({"type": "done"})
         except Exception as exc:  # сеть/лимиты OpenRouter — не роняем поток

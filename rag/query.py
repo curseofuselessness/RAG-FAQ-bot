@@ -1,6 +1,6 @@
 """Retrieval и генерация ответа (режим query)."""
 from rag import config
-from rag.config import CHAT_MODEL, client
+from rag.config import CHAT_MODEL, MAX_DISTANCE, client
 
 SYSTEM_PROMPT = """
 
@@ -63,18 +63,25 @@ def embed_query(question: str) -> list[float]:
     return embed([question])[0]
 
 
-def retrieve(question: str, top_k: int = 4) -> list[dict]:
-    """Ищет top_k ближайших чанков к вопросу в Chroma (косинусная близость векторов).
+NO_ANSWER = "В документах нет ответа на этот вопрос."
+
+
+def retrieve(question: str, top_k: int = 4, apply_threshold: bool = True) -> list[dict]:
+    """Ищет top_k ближайших чанков к вопросу в Chroma.
 
     Возвращает список словарей {text, source, chunk, distance} — чем меньше
-    distance, тем релевантнее чанк. Эти чанки станут контекстом для промпта.
+    distance, тем релевантнее чанк. Если distance больше MAX_DISTANCE,
+    чанк отбрасывается: значит в документах нет ничего подходящего.
+
+    apply_threshold=False нужен скрипту калибровки: чтобы подобрать порог,
+    надо видеть сырые distance, а не уже отфильтрованные.
     """
     results = config.collection.query(
         query_embeddings=[embed_query(question)],
         n_results=top_k,
         include=["documents", "metadatas", "distances"],
     )
-    return [
+    chunks = [
         {"text": doc, "source": meta["source"], "chunk": meta["chunk"], "distance": dist}
         for doc, meta, dist in zip(
             results["documents"][0],
@@ -82,6 +89,9 @@ def retrieve(question: str, top_k: int = 4) -> list[dict]:
             results["distances"][0],
         )
     ]
+    if apply_threshold:
+        chunks = [c for c in chunks if c["distance"] <= MAX_DISTANCE]
+    return chunks
 
 
 def build_context(chunks: list[dict]) -> str:
@@ -95,14 +105,13 @@ def build_context(chunks: list[dict]) -> str:
     )
 
 
-def stream_answer(question: str, top_k: int = 4):
+def stream_answer(question: str, chunks: list[dict]):
     """То же, что answer(), но отдаёт ответ по кусочкам (генератор строк).
 
-    Нужна для стриминга: API отдаёт текст клиенту по мере генерации,
-    а не ждёт полный ответ. Источники при этом доступны сразу —
-    retrieval выполняется до вызова LLM, поэтому их можно вернуть первыми.
+    Чанки передаются снаружи: retrieval уже выполнен в эндпоинте,
+    чтобы не делать один и тот же поиск дважды (эмбеддинг вопроса —
+    это сетевой запрос, его стоимость не хочется удваивать).
     """
-    chunks = retrieve(question, top_k=top_k)
     context = build_context(chunks)
 
     stream = client.chat.completions.create(
@@ -126,10 +135,17 @@ def stream_answer(question: str, top_k: int = 4):
 def answer(question: str, top_k: int = 4) -> dict:
     """Полный RAG-цикл: retrieve → промпт (контекст + вопрос) → LLM → ответ.
 
+    Если релевантных чанков нет (всё дальше MAX_DISTANCE), LLM не вызывается
+    вовсе: отвечаем отказом сразу. Это быстрее, дешевле и исключает
+    галлюцинацию, потому что модели просто не дают слова.
+
     temperature=0 — меньше креатива, меньше галлюцинаций.
     Возвращает словарь: ответ модели, список источников и usage (расход токенов).
     """
     chunks = retrieve(question, top_k=top_k)
+    if not chunks:
+        return {"answer": NO_ANSWER, "sources": [], "usage": {}}
+
     context = build_context(chunks)
 
     resp = client.chat.completions.create(

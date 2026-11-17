@@ -86,7 +86,7 @@ def test_ask_rejects_empty_question(client):
 
 def test_stream_sends_sources_tokens_and_done(client, monkeypatch):
     monkeypatch.setattr(api, "retrieve", lambda q: [{"source": "a.txt", "chunk": 3}])
-    monkeypatch.setattr(api, "stream_answer", lambda q: iter(["При", "вет"]))
+    monkeypatch.setattr(api, "stream_answer", lambda q, chunks: iter(["При", "вет"]))
 
     with client.stream("POST", "/ask/stream", json={"question": "?"}) as r:
         assert r.status_code == 200
@@ -104,10 +104,10 @@ def test_stream_sends_sources_tokens_and_done(client, monkeypatch):
 
 
 def test_stream_reports_errors(client, monkeypatch):
-    def boom(question):
+    def boom(question, chunks):
         raise RuntimeError("upstream down")
 
-    monkeypatch.setattr(api, "retrieve", lambda q: [])
+    monkeypatch.setattr(api, "retrieve", lambda q: [{"source": "a.txt", "chunk": 0}])
     monkeypatch.setattr(api, "stream_answer", boom)
 
     with client.stream("POST", "/ask/stream", json={"question": "?"}) as r:
@@ -115,3 +115,20 @@ def test_stream_reports_errors(client, monkeypatch):
 
     assert '"type": "error"' in text
     assert "upstream down" in text
+
+
+def test_stream_answers_without_llm_when_nothing_relevant(client, monkeypatch):
+    monkeypatch.setattr(api, "retrieve", lambda q: [])
+
+    def boom(question, chunks):
+        raise AssertionError("LLM не должна вызываться без релевантного контекста")
+
+    monkeypatch.setattr(api, "stream_answer", boom)
+
+    with client.stream("POST", "/ask/stream", json={"question": "борщ?"}) as r:
+        body = "".join(r.iter_text())
+
+    payloads = [json.loads(line[6:]) for line in body.splitlines() if line.startswith("data: ")]
+    assert payloads[0] == {"type": "sources", "sources": []}
+    assert any(p.get("text", "").startswith("В документах нет ответа") for p in payloads)
+    assert payloads[-1] == {"type": "done"}
