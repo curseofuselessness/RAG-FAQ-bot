@@ -22,6 +22,9 @@ EMBED_MODEL = "nvidia/nemotron-3.5-embed-1b:free"
 # скриптом eval/calibrate.py и задаётся через .env.
 MAX_DISTANCE = float(os.getenv("MAX_DISTANCE", "0.6"))
 
+# Отладка: печатать в консоль близость найденных чанков при каждом запросе
+DEBUG = os.getenv("DEBUG_RAG", "").lower() in ("1", "true", "yes", "on")
+
 # --- Chunking ---
 splitter = RecursiveCharacterTextSplitter(
     chunk_size=800,      # ~200 токенов: баланс точность/размытость

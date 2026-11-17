@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """Порог релевантности: фильтрация чанков и отказ без вызова LLM."""
+import types
+
 import rag.query as query
 from rag.config import MAX_DISTANCE
 from rag.query import NO_ANSWER, answer, retrieve
@@ -20,10 +22,15 @@ class FakeQueryResult:
         }
 
 
-def _setup(monkeypatch, distances):
-    monkeypatch.setattr(query, "config", type("C", (), {
-        "collection": FakeQueryResult(distances),
-    }))
+def _setup(monkeypatch, distances, debug=False):
+    monkeypatch.setattr(
+        query,
+        "config",
+        types.SimpleNamespace(
+            collection=FakeQueryResult(distances),
+            DEBUG=debug,
+        ),
+    )
     monkeypatch.setattr(query, "embed_query", lambda q: [0.0] * 2048)
 
 
@@ -49,6 +56,25 @@ def test_retrieve_returns_empty_when_everything_is_far(monkeypatch):
     _setup(monkeypatch, [MAX_DISTANCE + 0.1, MAX_DISTANCE + 0.2])
 
     assert retrieve("вопрос") == []
+
+
+def test_retrieve_prints_distances_in_debug(monkeypatch, capsys):
+    _setup(monkeypatch, [0.2, MAX_DISTANCE + 0.3], debug=True)
+
+    retrieve("вопрос")
+
+    out = capsys.readouterr().out
+    assert "[debug] вопрос: вопрос" in out
+    assert "0.200" in out
+    assert "far" in out
+
+
+def test_retrieve_is_silent_without_debug(monkeypatch, capsys):
+    _setup(monkeypatch, [0.2])
+
+    retrieve("вопрос")
+
+    assert capsys.readouterr().out == ""
 
 
 def test_answer_skips_llm_without_relevant_chunks(monkeypatch):

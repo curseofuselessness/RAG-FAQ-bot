@@ -89,9 +89,31 @@ def retrieve(question: str, top_k: int = 4, apply_threshold: bool = True) -> lis
             results["distances"][0],
         )
     ]
+    if config.DEBUG:
+        # печатаем всё найденное ДО фильтрации — видно и то, что отсеклось
+        _print_distances(question, chunks, apply_threshold)
     if apply_threshold:
         chunks = [c for c in chunks if c["distance"] <= MAX_DISTANCE]
     return chunks
+
+
+def _print_distances(question: str, chunks: list[dict], apply_threshold: bool) -> None:
+    """Печатает близость чанков в консоль — отладка retrieval.
+
+    Показывает, что именно нашлось и прошло ли оно порог: удобно отвечать
+    на вопрос «почему бот сказал, что ответа нет».
+    """
+    print(f"\n[debug] вопрос: {question}")
+    threshold_state = "применён" if apply_threshold else "не применён"
+    print(f"[debug] MAX_DISTANCE={MAX_DISTANCE}, порог {threshold_state}")
+    if not chunks:
+        print("[debug] ничего не найдено")
+        return
+    for c in chunks:
+        mark = "ok " if c["distance"] <= MAX_DISTANCE else "far"
+        preview = c["text"].replace("\n", " ")[:60]
+        print(f"[debug] {mark} {c['distance']:.3f}  {c['source']} chunk {c['chunk']}  «{preview}…»")
+    print()
 
 
 def build_context(chunks: list[dict]) -> str:
